@@ -27,9 +27,10 @@ class ChessBoard
 		count = 7
 		while count >= 0
 			row = @squares.select { |sq| sq.coord[0] == count }
-			count.even? ? checker_black(row) : checker_white(row)
+			puts "#{count + 1}  #{count.even? ? checker_black(row) : checker_white(row)}"
 			count -= 1
 		end
+		puts "    A B C D E F G H"
 	end
 
 	def checker_white(row)
@@ -41,7 +42,7 @@ class ChessBoard
 				sq.coord[1].even? ? ch_row << " " : ch_row << "■"
 			end
 		end
-		puts ch_row.join(" ")
+		ch_row.join(" ")
 	end
 
 	def checker_black(row)
@@ -53,7 +54,7 @@ class ChessBoard
 				sq.coord[1].odd? ? ch_row << " " : ch_row << "■"
 			end
 		end
-		puts ch_row.join(" ")
+		ch_row.join(" ")
 	end
 
 end
