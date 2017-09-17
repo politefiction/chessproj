@@ -12,7 +12,6 @@ class MoveSet
 		@current_square = current_square
 		@potential_moves = potential_moves
 	end
-
 end
 
 class ChessPiece
@@ -29,9 +28,9 @@ class ChessPiece
 		@color == "white" ? @token = wt : @token = bt
 	end
 
-	def self.all
+	def self.all 
 		@@all
-	end# refine self.all, find way to make attributes accessible
+	end 
 end
 
 
@@ -48,10 +47,10 @@ class Pawn < ChessPiece
 	end
 
 	def pawn_moves
-		cs = @move_set.current_square
+		x = @move_set.current_square[0]; y = @move_set.current_square[1]
 		pm = @move_set.potential_moves
-		pm << [cs[0], cs[1]+1]
-		pm << [cs[0], cs[1]+2] if @first_move
+		pm << [x, y+1]
+		pm << [x, y+2] if @first_move
 		#@move_set.potential_moves << [cs.coord[-1], cs.coord[1]+1] if that square's the current square for any opp color piece? Hmm
 		# will add diagonal move later	
 	end# pawn_moves still needs diagonal
@@ -68,14 +67,13 @@ class Rook < ChessPiece
 	end
 
 	def rook_moves
-		cs = @move_set.current_square
+		x = @move_set.current_square[0]; y = @move_set.current_square[1]
 		pm = @move_set.potential_moves
 		(1..7).to_a.each do |n|
-			pm << [cs[0]+n, cs[1]] if (cs[0]+n) < 8
-			pm << [cs[0], cs[1]+n] if (cs[1]+n) < 8
-			pm << [cs[0]-n, cs[1]] if (cs[0]-n) >= 0
-			pm << [cs[0], cs[1]-n] if (cs[1]-n) >= 0
+			pm << ([x+n, y] if x+n < 8) << ([x-n, y] if x-n >= 0)
+			pm << ([x, y+n] if y+n < 8) << ([x, y-n] if y-n >= 0)
 		end
+		pm.compact!
 	end
 end
 
@@ -90,10 +88,11 @@ class Knight < ChessPiece
 	end
 
 	def knight_base(a, b)
-		cs = @move_set.current_square; x = cs[0]; y = cs[1]
+		x = @move_set.current_square[0]; y = @move_set.current_square[1]
 		pm = @move_set.potential_moves
-		(pm << ([x+a, y+b] if y+a < 8) << ([x+a, y-b] if y-a >= 0)) if x + a < 8
-		(pm << ([x-a, y+b] if y+a < 8) << ([x-a, y-b] if y-a >= 0)) if x - a >= 0
+		(pm << ([x+a, y+b] if y+a < 8) << ([x+a, y-b] if y-a >= 0)) if x+a < 8
+		(pm << ([x-a, y+b] if y+a < 8) << ([x-a, y-b] if y-a >= 0)) if x-a >= 0
+		pm.compact!
 	end
 
 	def knight_moves
@@ -113,14 +112,13 @@ class Bishop < ChessPiece
 	end
 
 	def bishop_moves
-		cs = @move_set.current_square
+		x = @move_set.current_square[0]; y = @move_set.current_square[1]
 		pm = @move_set.potential_moves
 		(1..7).to_a.each do |n|
-			pm << [cs[0] + n, cs[1] + n] if (cs[0]+n) < 8 and (cs[1]+n) < 8
-			pm << [cs[0] + n, cs[1] - n] if (cs[0]+n) < 8 and (cs[1]-n) >= 0
-			pm << [cs[0] - n, cs[1] + n] if (cs[0]-n) >= 0 and (cs[1]+n) < 8
-			pm << [cs[0] - n, cs[1] - n] if (cs[0]-n) >= 0 and (cs[1]-n) >= 0
+			(pm << ([x+n, y+n] if y+n < 8) << ([x+n, y-n] if y-n >= 0)) if x+n < 8
+			(pm << ([x-n, y+n] if y+n < 8) << ([x-n, y-n] if y-n >= 0)) if x-n >= 0
 		end
+		pm.compact!
 	end
 end
 
@@ -134,24 +132,19 @@ class Queen < ChessPiece
 	end
 
 	def queen_moves
-		cs = @move_set.current_square
+		x = @move_set.current_square[0]; y = @move_set.current_square[1]
 		pm = @move_set.potential_moves
 		(1..7).to_a.each do |n|
-			pm << [cs[0]+n, cs[1]] if (cs[0]+n) < 8
-			pm << [cs[0], cs[1]+n] if (cs[1]+n) < 8
-			pm << [cs[0]-n, cs[1]] if (cs[0]-n) >= 0
-			pm << [cs[0], cs[1]-n] if (cs[1]-n) >= 0
+			pm << ([x+n, y] if x+n < 8) << ([x-n, y] if x-n >= 0)
+			pm << ([x, y+n] if y+n < 8) << ([x, y-n] if y-n >= 0)
+			(pm << ([x+n, y+n] if y+n < 8) << ([x+n, y-n] if y-n >= 0)) if x+n < 8
+			(pm << ([x-n, y+n] if y+n < 8) << ([x-n, y-n] if y-n >= 0)) if x-n >= 0
 		end
-		(1..7).to_a.each do |n|
-			pm << [cs[0] + n, cs[1] + n] if (cs[0]+n) < 8 and (cs[1]+n) < 8
-			pm << [cs[0] + n, cs[1] - n] if (cs[0]+n) < 8 and (cs[1]-n) >= 0
-			pm << [cs[0] - n, cs[1] + n] if (cs[0]-n) >= 0 and (cs[1]+n) < 8
-			pm << [cs[0] - n, cs[1] - n] if (cs[0]-n) >= 0 and (cs[1]-n) >= 0
-		end
+		pm.compact!
 	end
 end
 
-class King < ChessPiece # investigate king_moves; also need move for rook swap
+class King < ChessPiece # need move for rook swap
 	@@wt = "♔"
 	@@bt = "♚"
 	def initialize(color, current_square)
@@ -160,21 +153,23 @@ class King < ChessPiece # investigate king_moves; also need move for rook swap
 		king_moves
 	end
 
-	def king_moves # pushing nil values as is; knight_moves has same set up, but is fine...?
-		cs = @move_set.current_square; x = cs[0]; y = cs[1]
+	def king_moves 
+		x = @move_set.current_square[0]; y = @move_set.current_square[1]
 		pm = @move_set.potential_moves
-		pm << ([x + 1, y] if x+1 < 8) << ([x - 1, y] if x-1 >= 0)
-		pm << ([x, y + 1] if y+1 < 8) << ([x, y - 1] if y-1 >= 0)
-		(pm << ([x + 1, y + 1] if y+1 < 8) << ([x + 1, y - 1] if y-1 >= 0)) if x+1 < 8
-		(pm << ([x - 1, y + 1] if y+1 < 8) << ([x - 1, y - 1] if y-1 >= 0)) if x-1 >= 0
+		pm << ([x, y+1] if y+1 < 8) << ([x, y-1] if y-1 >= 0)
+		(pm << [x+1, y] << ([x+1, y+1] if y+1 < 8) << ([x+1, y-1] if y-1 >= 0)) if x+1 < 8
+		(pm << [x-1, y] << ([x-1, y+1] if y+1 < 8) << ([x-1, y-1] if y-1 >= 0)) if x-1 >= 0
+		pm.compact!
 
 	end
 end
 
-=begin
-knight = Knight.new("white", [0, 2])
-p knight.move_set.potential_moves
 
-king = King.new("black", [0, 2])
-p king.move_set.potential_moves
-=end
+
+knight = Knight.new("black", [1,2])
+#p knight.move_set.potential_moves
+king = King.new("white", [4, 0])
+#p king.move_set.potential_moves
+pawn = Pawn.new("white", [0, 1])
+
+p ChessPiece.all.select { |piece| piece.color == "white" }
