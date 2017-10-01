@@ -1,10 +1,5 @@
-require_relative 'board'
 
-# Can assign black/white to pieces when creating objects for Player class.
-# Will need to create a way for potential moves to account 
-# for squares that are aleady occupied by other pieces.
-
-
+# Keeps track of each piece's current square and potential moves
 class MoveSet
 	attr_accessor :current_square, :potential_moves
 
@@ -14,162 +9,215 @@ class MoveSet
 	end
 end
 
-class ChessPiece
+# Attributes and methods common(ish) to all pieces
+class ChessPiece 
 	attr_accessor :color, :move_set, :token
-	@@all = []
+	@@all = []; @@white = []; @@black = []
 
 	def initialize(color, current_square)
 		@color = color
 		@move_set = MoveSet.new(current_square)
 		@@all << self
-	end
-
-	def set_token(wt, bt)
-		@color == "white" ? @token = wt : @token = bt
+		@color == "white" ? @@white << self : @@black << self
 	end
 
 	def self.all 
 		@@all
 	end 
+
+	def self.white
+		@@white
+	end
+
+	def self.black
+		@@black
+	end
+
+	def set_token(wt, bt)
+		@color == "white" ? @token = wt : @token = bt
+	end 
+
+	def set_moves
+		x = @move_set.current_square[0]; y = @move_set.current_square[1]
+		pm = @move_set.potential_moves
+		yield(x, y, pm)
+		pm.compact!
+		overlap_wt = pm & @@white.map { |pc| pc.move_set.current_square }
+		overlap_bk = pm & @@black.map { |pc| pc.move_set.current_square }
+		@color == "white" ? @move_set.potential_moves -= overlap_wt : @move_set.potential_moves -= overlap_bk
+	end
+
+	# Helper for setting rook, bishop, and queen moves
+	def push_by_stops(stop_hash)
+		stop_hash.map do |coord, stop| 
+			unless stop.include? true
+				@move_set.potential_moves << (coord if coord[0].between?(0,7) and coord[1].between?(0,7))
+			end
+			stop << true if occupied?(coord)
+		end
+	end
+
+	def occupied? (coord)
+		occupied = @@all.map { |pc| pc.move_set.current_square }
+		occupied.include? coord
+	end
 end
 
 
-class Pawn < ChessPiece
+class Pawn < ChessPiece 
 	attr_accessor :first_move
-	@@wt = "♙"
-	@@bt = "♟"
+	@@wt = "♙"; @@bt = "♟"
 
 	def initialize(color, current_square)
 		super
 		@first_move = true
 		set_token(@@wt, @@bt) 
-		pawn_moves
 	end
 
 	def pawn_moves
-		x = @move_set.current_square[0]; y = @move_set.current_square[1]
-		pm = @move_set.potential_moves
-		pm << [x, y+1]
-		pm << [x, y+2] if @first_move
-		#@move_set.potential_moves << [cs.coord[-1], cs.coord[1]+1] if that square's the current square for any opp color piece? Hmm
-		# will add diagonal move later	
-	end# pawn_moves still needs diagonal
+		@move_set.potential_moves = []
+		set_moves do |x, y, pm|
+			if @color == "white"
+				(pm << ([x, y+1] if y+1 < 8) << (([x, y+2] if @first_move) unless occupied? [x, y+2])) unless occupied? [x, y+1]
+				[[x+1, y+1], [x-1, y+1]].each { |coord| pm << coord if occupied? coord }
+			else
+				(pm << ([x, y-1] if y-1 >= 0) << (([x, y-2] if @first_move) unless occupied? [x, y-2])) unless occupied? [x, y-1]
+				[[x+1, y-1], [x-1, y-1]].each { |coord| pm << coord if occupied? coord }
+			end
+		end
+	end
 end
 
 class Rook < ChessPiece
-	@@wt = "♖"
-	@@bt = "♜"
+	attr_accessor :first_move
+	@@wt = "♖"; @@bt = "♜"
 
 	def initialize(color, current_square)
 		super
+		@first_move = true
 		set_token(@@wt, @@bt) 
-		rook_moves
 	end
 
 	def rook_moves
-		x = @move_set.current_square[0]; y = @move_set.current_square[1]
-		pm = @move_set.potential_moves
-		(1..7).to_a.each do |n|
-			pm << ([x+n, y] if x+n < 8) << ([x-n, y] if x-n >= 0)
-			pm << ([x, y+n] if y+n < 8) << ([x, y-n] if y-n >= 0)
+		@move_set.potential_moves = []
+		set_moves do |x, y, pm|
+			estop = [false]; wstop = [false]; nstop = [false]; sstop = [false]
+			(1..7).to_a.map do |n|
+				rstops = { [x+n, y]=>estop, [x-n, y]=>wstop, [x, y+n]=>nstop, [x, y-n]=>sstop }
+				push_by_stops(rstops)
+			end
 		end
-		pm.compact!
 	end
 end
 
 class Knight < ChessPiece
-	@@wt = "♘"
-	@@bt = "♞"
+	@@wt = "♘"; @@bt = "♞"
 	
 	def initialize(color, current_square)
 		super
 		set_token(@@wt, @@bt)
-		knight_moves
 	end
 
 	def knight_base(a, b)
-		x = @move_set.current_square[0]; y = @move_set.current_square[1]
-		pm = @move_set.potential_moves
-		(pm << ([x+a, y+b] if y+a < 8) << ([x+a, y-b] if y-a >= 0)) if x+a < 8
-		(pm << ([x-a, y+b] if y+a < 8) << ([x-a, y-b] if y-a >= 0)) if x-a >= 0
-		pm.compact!
+		set_moves do |x, y, pm|
+			kncoords = [[x+a, y+b], [x+a, y-b], [x-a, y+b], [x-a, y-b]]
+			kncoords.each { |coord| pm << coord if coord[0].between?(0,7) and coord[1].between?(0,7) }
+		end
 	end
 
 	def knight_moves
+		@move_set.potential_moves = []
 		knight_base(1, 2)
 		knight_base(2, 1)
 	end
 end
 
 class Bishop < ChessPiece
-	@@wt = "♗"
-	@@bt = "♝"
+	@@wt = "♗"; @@bt = "♝"
 
 	def initialize(color, current_square)
 		super
 		set_token(@@wt, @@bt)
-		bishop_moves
 	end
 
 	def bishop_moves
-		x = @move_set.current_square[0]; y = @move_set.current_square[1]
-		pm = @move_set.potential_moves
-		(1..7).to_a.each do |n|
-			(pm << ([x+n, y+n] if y+n < 8) << ([x+n, y-n] if y-n >= 0)) if x+n < 8
-			(pm << ([x-n, y+n] if y+n < 8) << ([x-n, y-n] if y-n >= 0)) if x-n >= 0
+		@move_set.potential_moves = []
+		set_moves do |x, y, pm|
+			nestop = [false]; nwstop = [false]; sestop = [false]; swstop = [false]
+			(1..7).to_a.each do |n|
+				bstops = { [x+n, y+n]=>nestop, [x+n, y-n]=>nwstop, [x-n, y+n]=>sestop, [x-n, y-n]=>swstop }
+				push_by_stops(bstops)
+			end
 		end
-		pm.compact!
 	end
 end
 
 class Queen < ChessPiece
-	@@wt = "♕"
-	@@bt = "♛"
+	@@wt = "♕"; @@bt = "♛"
+
 	def initialize(color, current_square)
 		super
 		set_token(@@wt, @@bt)
-		queen_moves
 	end
 
 	def queen_moves
-		x = @move_set.current_square[0]; y = @move_set.current_square[1]
-		pm = @move_set.potential_moves
-		(1..7).to_a.each do |n|
-			pm << ([x+n, y] if x+n < 8) << ([x-n, y] if x-n >= 0)
-			pm << ([x, y+n] if y+n < 8) << ([x, y-n] if y-n >= 0)
-			(pm << ([x+n, y+n] if y+n < 8) << ([x+n, y-n] if y-n >= 0)) if x+n < 8
-			(pm << ([x-n, y+n] if y+n < 8) << ([x-n, y-n] if y-n >= 0)) if x-n >= 0
+		@move_set.potential_moves = []
+		set_moves do |x, y, pm|
+			estop = [false]; wstop = [false]; nstop = [false]; sstop = [false]
+			nestop = [false]; nwstop = [false]; sestop = [false]; swstop = [false]
+			(1..7).to_a.each do |n|
+				qstops = { [x+n, y]=>estop, [x-n, y]=>wstop, [x, y+n]=>nstop, [x, y-n]=>sstop, 
+					[x+n, y+n]=>nestop, [x+n, y-n]=>nwstop, [x-n, y+n]=>sestop, [x-n, y-n]=>swstop }
+				push_by_stops(qstops)
+			end
 		end
-		pm.compact!
 	end
 end
 
-class King < ChessPiece # need move for rook swap
-	@@wt = "♔"
-	@@bt = "♚"
+class King < ChessPiece
+	attr_accessor :check, :checkmate, :first_move
+	@@wt = "♔"; @@bt = "♚"
+
 	def initialize(color, current_square)
 		super
+		@first_move = true
+		@checkmate = false
 		set_token(@@wt, @@bt)
-		king_moves
 	end
 
 	def king_moves 
-		x = @move_set.current_square[0]; y = @move_set.current_square[1]
-		pm = @move_set.potential_moves
-		pm << ([x, y+1] if y+1 < 8) << ([x, y-1] if y-1 >= 0)
-		(pm << [x+1, y] << ([x+1, y+1] if y+1 < 8) << ([x+1, y-1] if y-1 >= 0)) if x+1 < 8
-		(pm << [x-1, y] << ([x-1, y+1] if y+1 < 8) << ([x-1, y-1] if y-1 >= 0)) if x-1 >= 0
-		pm.compact!
+		@move_set.potential_moves = []
+		set_moves do |x, y, pm|
+			kcoords = [[x, y+1], [x, y-1], [x+1, y], [x+1, y+1], [x+1, y-1], [x-1, y], [x-1, y+1], [x-1, y-1]]
+			kcoords.each do |coord| 
+				(pm << coord if coord[0].between?(0,7) and coord[1].between?(0,7)) unless check? coord
+			end
+			castle?(pm, y) if @first_move and check? == false
+		end
+	end
 
+	def castle? (pm, y)
+		rooks = @@all.select { |pc| pc.class == Rook and pc.first_move == true and pc.color == @color }
+		if rooks.any? { |pc| pc.move_set.current_square == [0, y] }
+			pm << [1, y] if [1,2,3].all? { |x| !(occupied? [x, y]) and !(check? [x, y]) }
+		elsif rooks.any? { |pc| pc.move_set.current_square == [7, y] }
+			pm << [6, y] if [5,6].all? { |x| !(occupied? [x, y]) and !(check? [x, y]) }
+		end
+	end
+
+	def check? (square=@move_set.current_square)
+		if @color == "white"
+			@@black.any? { |pc| pc.move_set.potential_moves.include? square } ? true : false
+		else
+			@@white.any? { |pc| pc.move_set.potential_moves.include? square } ? true : false
+		end
+	end
+
+	def checkmate?
+		if check?
+			@checkmate = true if @move_set.potential_moves.all? { |coord| check? coord }
+		end
+		@checkmate
 	end
 end
 
-
-
-knight = Knight.new("black", [1,2])
-#p knight.move_set.potential_moves
-king = King.new("white", [4, 0])
-#p king.move_set.potential_moves
-pawn = Pawn.new("white", [0, 1])
-
-p ChessPiece.all.select { |piece| piece.color == "white" }
