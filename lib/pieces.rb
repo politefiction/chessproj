@@ -33,6 +33,11 @@ class ChessPiece
 		@@black
 	end
 
+	# Clears the board for a new game
+	def self.clear
+		@@all = []; @@white = []; @@black = []
+	end
+
 	def set_token(wt, bt)
 		@color == "white" ? @token = wt : @token = bt
 	end 
