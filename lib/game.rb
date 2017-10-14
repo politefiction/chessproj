@@ -2,8 +2,10 @@ require_relative 'board'
 require_relative 'pieces'
 require_relative 'player'
 
-# A few notes:
+# Notes:
 # Other pieces aren't supposed to be able to actually capture the king.
+# In fact, when king is in check, the game should only allow moves that
+# get it out of check.
 # Castling move fixed.
 
 
@@ -48,7 +50,12 @@ class ChessGame
 
 	def king_checked?
 		kings = ChessPiece.all.select { |pc| pc.class == King }
-		kings.each { |king| puts "#{king.color.capitalize}'s king is in check!" if king.check? }
+		kings.each do |king| 
+			if king.check?
+				puts "#{king.color.capitalize}'s king is in check!" if king.check?
+				king.protect_king
+			end
+		end
 	end
 
 	def king_checkmated?
