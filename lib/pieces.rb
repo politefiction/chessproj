@@ -57,6 +57,10 @@ class ChessPiece
 		occupied = @@all.map { |pc| pc.current_square }
 		occupied.include? coord
 	end
+
+	def nullify
+		self.current_square = nil; self.color = nil; self.potential_moves = nil
+	end
 end
 
 class Pawn < ChessPiece 
@@ -223,7 +227,7 @@ class King < ChessPiece
 				move = ChessPiece.new(@color, coord)
 				oppcol.each { |pc| pc.set_moves }
 				@protection << coord if check? == false unless @protection.include? coord
-				move.current_square = nil; move.color = nil
+				move.nullify
 			end
 			pc.potential_moves = (pc.potential_moves & @protection)
 		end

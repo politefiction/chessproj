@@ -20,7 +20,7 @@ class Player
 
 
 	def generate_moves
-		@pieces.each { |pc| pc.set_moves }
+		@pieces.each { |pc| pc.set_moves unless pc.current_square == nil }
 	end
 
 
@@ -34,15 +34,35 @@ class Player
 		end
 	end
 
+	def pawn_promotion?(movepc, to)
+		if (movepc.color == "white" and to[1] == 7) or (movepc.color == "black" and to[1] == 0)
+			puts "Which promotion would you like for your pawn: Rook, Bishop, Knight or Queen?"
+			answer = gets.chomp.downcase
+			case answer
+			when "rook"
+				@pieces << Rook.new(@color, to); movepc.nullify
+			when "bishop"
+				@pieces << Bishop.new(@color, to); movepc.nullify
+			when "knight"
+				@pieces << Knight.new(@color, to); movepc.nullify
+			when "queen"
+				@pieces << Queen.new(@color, to); movepc.nullify
+			else
+				puts "That option is not available. Please try again."; turn
+			end
+		end
+	end
+
 	def convert_coord(coord)
 		split_coord = coord.downcase.split(//)
 		num_coord = []
-		if split_coord[0].between?('a','h') and split_coord[1].to_i.between?(1,8)
-			('a'..'h').to_a.each_with_index { |n, i| num_coord << i if n == split_coord[0] }
-			num_coord << (split_coord[1].to_i - 1)
-			num_coord
-		else
-			false
+		unless coord.empty?
+			if split_coord[0].between?('a','h') and split_coord[1].to_i.between?(1,8)
+				('a'..'h').to_a.each_with_index { |n, i| num_coord << i if n == split_coord[0] }
+				num_coord << (split_coord[1].to_i - 1); num_coord
+			else
+				false
+			end
 		end
 	end
 
@@ -67,13 +87,12 @@ class Player
 			end
 			castling?(movepc, to) if movepc.class == King
 			movepc.current_square = to
+			pawn_promotion?(movepc, to) if movepc.class == Pawn
 			movepc.first_move = false if movepc.class == (Pawn || Rook || King)
 		else
 			puts "Invalid move. Would you like to see potential moves? (Y/N)"
 			answer = gets.chomp.downcase
 			hint(movepc) if answer[0] == "y"; turn
-			#puts "Potential_moves: #{movepc.potential_moves.inspect}"
-			#turn
 		end
 	end
 
@@ -98,7 +117,6 @@ class Player
 			turn
 		end
 	end
-
 end
 
 
