@@ -3,10 +3,9 @@ require_relative 'pieces'
 require_relative 'player'
 
 # Notes:
-# Other pieces aren't supposed to be able to actually capture the king.
-# In fact, when king is in check, the game should only allow moves that
-# get it out of check.
-# Castling move fixed.
+# King protection stuff appears to be working now. Castling move fixed.
+# Pawn promotion added.
+# Need draw conditions.
 
 
 class ChessGame
@@ -36,12 +35,12 @@ class ChessGame
 
 	def run_game (current_turn=@player1)
 		2.times { @player1.generate_moves; @player2.generate_moves }
-		king_checkmated?; king_checked?
+		king_checkmated?; king_checked?; king_stalemated?
 		current_turn.turn; puts
 		pieces_on_board; puts
 		if current_turn == @player1
 			@player2.subtract_captured(@player1.captured)
-			run_game(@player2)
+			run_game(@player2)+
 		else
 			@player1.subtract_captured(@player2.captured)
 			run_game
@@ -63,6 +62,16 @@ class ChessGame
 		kings.each do |king|
 			if king.checkmate? 
 				puts "Checkmate! #{king.color == "white" ? "Black wins!" : "White wins!"}"
+				exit
+			end
+		end
+	end
+
+	def king_stalemated?
+		kings = ChessPiece.all.select { |pc| pc.class == King }
+		kings.each do |king|
+			if king.stalemate?
+				puts "Stalemate. Game over."
 				exit
 			end
 		end

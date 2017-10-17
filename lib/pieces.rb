@@ -170,7 +170,7 @@ class Queen < ChessPiece
 	end
 end
 
-class King < ChessPiece
+class King < ChessPiece 
 	attr_accessor :checkmate, :protection
 	@@wt = "♔"; @@bt = "♚"
 
@@ -190,6 +190,16 @@ class King < ChessPiece
 				(pm << coord if coord.all? { |c| c.between?(0,7) }) unless check? coord
 			end
 			can_castle?(pm, y) if @first_move and check? == false
+			pawn_ahead?(x, y)
+		end
+	end
+
+	def pawn_ahead?(x, y)
+		sides = [[x+1, y], [x-1, y]]
+		if @color == "white"
+			@potential_moves -= sides if @@black.any? { |pc| pc.class == Pawn and pc.current_square == [x, y+1]}
+		else
+			@potential_moves -= sides if @@white.any? { |pc| pc.class == Pawn and pc.current_square == [x, y-1]}
 		end
 	end
 
@@ -203,11 +213,14 @@ class King < ChessPiece
 		end
 	end
 
-	def check? (square=@current_square)
-		if @color == "white"
-			@@black.any? { |pc| pc.potential_moves.include? square } ? true : false
+	def check? (square=@current_square) # Can probably be pared down a bit
+		@color == "white" ? oppcol = @@black : oppcol = @@white
+		if oppcol.any? { |pc| pc.potential_moves.include? square and pc.class != Pawn }
+			true
+		elsif oppcol.any? { |pc| pc.potential_moves.include? square and pc.current_square[0] != square[0] }
+			true
 		else
-			@@white.any? { |pc| pc.potential_moves.include? square } ? true : false
+			false
 		end
 	end
 
@@ -216,6 +229,11 @@ class King < ChessPiece
 			@checkmate = true if @potential_moves.all? { |coord| check? coord } and @protection.empty?
 		end
 		@checkmate
+	end
+
+	def stalemate?
+		@color == "white" ? team = @@white : team = @@black
+		(check? == false and team.all? { |pc| pc.potential_moves.empty? }) ? true : false
 	end
 
 	def protect_king
@@ -234,35 +252,7 @@ class King < ChessPiece
 	end
 end
 
-=begin
-rook = Rook.new("white", [0, 3])
-bishop = Bishop.new("black", [7, 3])
-king = King.new("white", [4, 0])
-pawn = Pawn.new("white", [6, 0])
-bishop2 = Bishop.new("white", [4, 4])
-
-2.times { ChessPiece.all.each { |pc| pc.set_moves unless pc.current_square == nil } }
-king.protect_king if king.check?
-
-#p king.potential_moves
-p pawn.potential_moves
-p rook.potential_moves
-p bishop2.potential_moves
-
-
-#p king.check?
-#ChessPiece.all.each { |pc| puts pc.inspect unless pc.current_square == nil }
-#p ChessPiece.all
-
-
 
 =begin
-
-what if I tried with the black (well, opposing) pieces?
--go through each black piece's potential moves
--see if moving there would result in check of white's king
--if so, push that square to, idk, a 'threatened' array
--match that array against white pieces (except king); subtract any potential moves that don't match
--no, the test pieces would need to have same set of moves as threatening piece
 
 =end

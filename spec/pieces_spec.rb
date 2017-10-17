@@ -142,11 +142,30 @@ describe King do
 	end
 
 	describe '#checkmate?' do
+		let(:bishop) { Bishop.new("black", [7,2]) }
+		let(:queen) { Queen.new("black", [3,3]) }
+		let(:pawn) { Pawn.new("black", [4,2]) }
+		
+		context 'when pawn is two squares ahead and king is threatened on all other sides' do
+			before { bishop.set_moves; queen.set_moves; pawn.set_moves }
+			it 'does not trigger a checkmate' do
+				expect(subject.checkmate?).to eq(false)
+			end
+		end
+
 		context 'when king is threatened on all sides' do
-			let(:bishop) { Bishop.new("black", [7,2]) }
-			let(:queen) { Queen.new("black", [3,3]) }
-			let(:knight) { Knight.new("black", [6,2]) }
-			before { bishop.set_moves; queen.set_moves; subject.set_moves; knight.set_moves }
+			let(:knight) { Knight.new("black", [6, 2]) }
+			before { knight.set_moves }
+			it 'triggers a checkmate' do
+				expect(subject.checkmate?).to eq(true)
+			end
+		end
+
+		context 'when king has threats on all sides including a diagonal pawn' do
+			before do
+				pawn.current_square = [3, 1]; queen.current_square = [4, 2]
+				pawn.set_moves; queen.set_moves
+			end
 			it 'triggers a checkmate' do
 				expect(subject.checkmate?).to eq(true)
 			end
