@@ -1,13 +1,13 @@
 require_relative 'pieces'
 
 class Player
-	attr_accessor :color, :pieces, :captured
+	attr_accessor :color, :pieces, :captured, :move_history
+	@@move_count = 0
 
 	def initialize(color)
 		@color = color
-		@pieces = []; @captured = []
+		@pieces = []; @captured = []; @move_history = []
 		@color == "white" ? generate_pieces(0, 1) : generate_pieces(7, 6)
-		generate_moves
 	end
 
 	def generate_pieces(a, b)
@@ -19,33 +19,33 @@ class Player
 	end
 
 
-	def generate_moves
-		@pieces.each { |pc| pc.set_moves unless pc.current_square == nil }
+	def generate_moves 
+		@pieces.each { |pc| pc.set_moves }
 	end
 
 
 	def castling?(king, to)
 		y = king.current_square[1]
-		if king.first_move and king.potential_moves.include? ([1,y] or [6,y])
-			rook1 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [0, y] }[0]
-			rook2 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [7, y] }[0]
-			rook1.current_square = [2,y] if to == [1,y]
-			rook2.current_square = [5,y] if to == [6,y]
+		rook1 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [0, y] }[0]
+		rook2 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [7, y] }[0]
+		if king.first_move
+			(rook1.current_square = [2,y] if to == [1,y]) if king.potential_moves.include? [1,y]
+			(rook2.current_square = [5,y] if to == [6,y]) if king.potential_moves.include? [6,y]
 		end
 	end
 
 	def pawn_promotion?(movepc, to)
 		if (movepc.color == "white" and to[1] == 7) or (movepc.color == "black" and to[1] == 0)
-			puts "Which promotion would you like for your pawn: Rook, Bishop, Knight or Queen?"
+			puts "Which promotion would you like for your pawn: 1) Rook, 2) Bishop, 3) Knight or 4) Queen?"
 			answer = gets.chomp.downcase
 			case answer
-			when "rook"
+			when "rook", "1"
 				@pieces << Rook.new(@color, to); movepc.nullify
-			when "bishop"
+			when "bishop", "2"
 				@pieces << Bishop.new(@color, to); movepc.nullify
-			when "knight"
+			when "knight", "3"
 				@pieces << Knight.new(@color, to); movepc.nullify
-			when "queen"
+			when "queen", "4"
 				@pieces << Queen.new(@color, to); movepc.nullify
 			else
 				puts "That option is not available. Please try again."; turn
@@ -78,15 +78,16 @@ class Player
 	end
 
 	def move_piece(from, to)
-		movepc = @pieces.select { |pc| pc.current_square == from }[0]
+		movepc = @pieces.select { |pc| pc.current_square == from }[0]; captured_piece = false
 		if movepc.potential_moves.include? to
 			if ChessPiece.occupies? to
 				oppospc = ChessPiece.all.select { |pc| pc.current_square == to }[0]
-				oppospc.current_square = nil; oppospc.potential_moves = []
-				@captured << oppospc
+				oppospc.previous_square = to; oppospc.nullify
+				captured_piece = true; @captured << oppospc
 			end
 			castling?(movepc, to) if movepc.class == King
-			movepc.current_square = to
+			movepc.previous_square = from; movepc.current_square = to
+			track_player_moves(movepc, captured_piece)
 			pawn_promotion?(movepc, to) if movepc.class == Pawn
 			movepc.first_move = false if movepc.class == (Pawn || Rook || King)
 		else
@@ -96,8 +97,18 @@ class Player
 		end
 	end
 
-	def subtract_captured(captured)
-		@pieces -= captured
+	def track_player_moves(movepc, captured_piece)
+		@move_history << {
+			move_num: @@move_count += 1,
+			moved: movepc,
+			from: movepc.previous_square,
+			to: movepc.current_square,
+			captured_piece: captured_piece
+		}
+	end
+
+	def subtract_captured_by(opplayer)
+		@pieces -= opplayer.captured
 	end
 
 	def turn
@@ -119,9 +130,25 @@ class Player
 	end
 end
 
-
-
-
 =begin
+player1 = Player.new("white")
+player2 = Player.new("black")
+player1.generate_moves
+player2.generate_moves
+
+player2.pieces.each { |pc| puts "#{pc.class}: #{pc.potential_moves}"}
+
+2.times { [player1, player1].each { |p| p.generate_moves } }
+
+player1.move_piece([2,1], [2,3]); [player1, player2].each { |player| player.generate_moves }
+player2.move_piece([3,6], [3,4]); [player1, player2].each { |player| player.generate_moves }
+p player2.move_history
+puts
+player1.move_piece([2,3], [3,4]); player2.subtract_captured_by(player1)
+#p player2.pieces[8..-1].each { |pc| pc.set_moves }
+#[player1, player2].each { |player| player.generate_moves }
+p player1.move_history
+puts
+p player2.move_history
 
 =end 

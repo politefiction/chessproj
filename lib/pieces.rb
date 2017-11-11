@@ -1,12 +1,14 @@
+#require_relative 'board'
 
 # Attributes and methods common(ish) to all pieces
 class ChessPiece 
-	attr_accessor :color, :token, :current_square, :potential_moves, :first_move
+	attr_accessor :color, :token, :current_square, :previous_square, :potential_moves, :first_move
 	@@all = []; @@white = []; @@black = []
 
 	def initialize(color, current_square)
 		@color = color
 		@current_square = current_square
+		@previous_square = nil
 		@potential_moves = []
 		@@all << self
 		@color == "white" ? @@white << self : @@black << self
@@ -34,13 +36,19 @@ class ChessPiece
 	end 
 
 	def set_moves_gen
-		x = @current_square[0]; y = @current_square[1]
-		pm = @potential_moves
-		yield(x, y, pm)
-		pm.compact!
-		overlap_wt = pm & @@white.map { |pc| pc.current_square }
-		overlap_bk = pm & @@black.map { |pc| pc.current_square }
-		@color == "white" ? @potential_moves -= overlap_wt : @potential_moves -= overlap_bk
+		unless @current_square == nil
+			x = @current_square[0]; y = @current_square[1]; pm = @potential_moves
+			yield(x, y, pm)
+			pm.compact!
+			@color == "white" ? subtract_overlap(@@white, @@black) : subtract_overlap(@@black, @@white)
+		end
+	end
+
+	def subtract_overlap(same, opp)
+		overlap = @potential_moves & same.map do |pc| 
+			pc.current_square #unless opp.any? { |p| p.current_square == pc.current_square }
+		end
+		@potential_moves -= overlap
 	end
 
 	# Helper for setting rook, bishop, and queen moves
@@ -171,27 +179,47 @@ class Queen < ChessPiece
 end
 
 class King < ChessPiece 
-	attr_accessor :checkmate, :protection
+	attr_accessor :checkmate, :protection, :full_rom, :barred_squares
 	@@wt = "♔"; @@bt = "♚"
 
 	def initialize(color, current_square)
 		super
 		@first_move = true
 		@checkmate = false
-		@protection = []
+		@protection = []; @barred_squares = []; @full_rom = []
 		set_token(@@wt, @@bt)
 	end
 
 	def set_moves 
-		@potential_moves = []
+		@potential_moves = []; @barred_squares = []; @full_rom = []
+		avoid_squares
 		set_moves_gen do |x, y, pm|
 			kcoords = [[x, y+1], [x, y-1], [x+1, y], [x+1, y+1], [x+1, y-1], [x-1, y], [x-1, y+1], [x-1, y-1]]
 			kcoords.each do |coord| 
-				(pm << coord if coord.all? { |c| c.between?(0,7) }) unless check? coord
+				copy_full_rom(coord)
+				pm << coord if coord.all? { |c| c.between?(0,7) } unless @barred_squares.include? coord
 			end
 			can_castle?(pm, y) if @first_move and check? == false
 			pawn_ahead?(x, y)
 		end
+	end
+
+	def avoid_squares
+		real_csquare = @current_square
+		@color == "white" ? oppcol = @@black : oppcol = @@white
+		oppking = oppcol.select { |pc| pc.class == King }[0]
+		(0..7).to_a.each do |x|
+			(0..7).to_a.each do |y|
+				@current_square = [x, y]
+				oppcol.each { |pc| pc.set_moves unless pc == oppking }
+				@barred_squares << [x, y] if check? or oppking.full_rom.include? [x,y]
+			end
+		end
+		@current_square = real_csquare
+	end
+
+	def copy_full_rom(crd)
+		@full_rom << crd if crd.all? { |c| c.between?(0,7) }
 	end
 
 	def pawn_ahead?(x, y)
@@ -213,7 +241,7 @@ class King < ChessPiece
 		end
 	end
 
-	def check? (square=@current_square) # Can probably be pared down a bit
+	def check? (square=@current_square)
 		@color == "white" ? oppcol = @@black : oppcol = @@white
 		if oppcol.any? { |pc| pc.potential_moves.include? square and pc.class != Pawn }
 			true
@@ -236,23 +264,51 @@ class King < ChessPiece
 		(check? == false and team.all? { |pc| pc.potential_moves.empty? }) ? true : false
 	end
 
-	def protect_king
+	def protect_king #revamp? maybe later
 		@protection = []
-		@color == "white" ? oppcol = @@black : oppcol = @@white
+		oppcol = @@all.select { |pc| pc.color != @color }
+		samecol = @@all.select { |pc| pc.color == @color }
 		oppcol.select { |pc| pc.potential_moves.include? @current_square }.each { |pc| @protection << pc.current_square }
-		@@all.select { |pc| pc.color == @color and pc.class != King }.each do |pc|
+		samecol.select { |pc| pc.class != King }.each do |pc|
+			real_csquare = pc.current_square
 			pc.potential_moves.each do |coord|
-				move = ChessPiece.new(@color, coord)
+				pc.current_square = coord
 				oppcol.each { |pc| pc.set_moves }
 				@protection << coord if check? == false unless @protection.include? coord
-				move.nullify
 			end
-			pc.potential_moves = (pc.potential_moves & @protection)
+			pc.current_square = real_csquare
 		end
+		samecol.select { |pc| pc.class != King }.each do |pc|
+			pc.set_moves; pc.potential_moves = (pc.potential_moves & @protection)
+		end
+
 	end
 end
 
 
 =begin
+king = King.new("white", [4,0])
+king2 = King.new("black", [4,2])
+pawn = Pawn.new("black", [4,1])
+2.times { [king, king2, pawn].each { |pc| pc.set_moves  } }
+#p rook.potential_moves
+#p rook.full_rom
+#puts 
+p "Can occupy: #{king.potential_moves}"
+p "Can't occupy: #{king.barred_squares}"
+p "Current square: #{king.current_square}"
+puts
+p king.stalemate?
+
+pawn = Pawn.new("black", [4,1])
+king = King.new("white", [4,0])
+king2 = King.new("black", [4,2])
+
+[pawn, king, king2].each { |pc| pc.set_moves }
+p king.potential_moves
+p king.full_rom
+
+p king2.potential_moves
+p king2.full_rom
 
 =end
