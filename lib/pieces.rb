@@ -46,7 +46,7 @@ class ChessPiece
 
 	def subtract_overlap(same, opp)
 		overlap = @potential_moves & same.map do |pc| 
-			pc.current_square #unless opp.any? { |p| p.current_square == pc.current_square }
+			pc.current_square
 		end
 		@potential_moves -= overlap
 	end
@@ -67,7 +67,9 @@ class ChessPiece
 	end
 
 	def nullify
-		self.current_square = nil; self.color = nil; self.potential_moves = nil
+		self.current_square = nil
+		self.color = nil
+		self.potential_moves = nil
 	end
 end
 
@@ -196,7 +198,7 @@ class King < ChessPiece
 		set_moves_gen do |x, y, pm|
 			kcoords = [[x, y+1], [x, y-1], [x+1, y], [x+1, y+1], [x+1, y-1], [x-1, y], [x-1, y+1], [x-1, y-1]]
 			kcoords.each do |coord| 
-				copy_full_rom(coord)
+				@full_rom << coord if coord.all? { |c| c.between?(0,7) }
 				pm << coord if coord.all? { |c| c.between?(0,7) } unless @barred_squares.include? coord
 			end
 			can_castle?(pm, y) if @first_move and check? == false
@@ -206,7 +208,7 @@ class King < ChessPiece
 
 	def avoid_squares
 		real_csquare = @current_square
-		@color == "white" ? oppcol = @@black : oppcol = @@white
+		oppcol = (@color == "white" ? @@black : @@white)
 		oppking = oppcol.select { |pc| pc.class == King }[0]
 		(0..7).to_a.each do |x|
 			(0..7).to_a.each do |y|
@@ -218,11 +220,7 @@ class King < ChessPiece
 		@current_square = real_csquare
 	end
 
-	def copy_full_rom(crd)
-		@full_rom << crd if crd.all? { |c| c.between?(0,7) }
-	end
-
-	def pawn_ahead?(x, y)
+	def pawn_ahead?(x, y) # simplify?
 		sides = [[x+1, y], [x-1, y]]
 		if @color == "white"
 			@potential_moves -= sides if @@black.any? { |pc| pc.class == Pawn and pc.current_square == [x, y+1]}
@@ -241,11 +239,10 @@ class King < ChessPiece
 		end
 	end
 
-	def check? (square=@current_square)
-		@color == "white" ? oppcol = @@black : oppcol = @@white
-		if oppcol.any? { |pc| pc.potential_moves.include? square and pc.class != Pawn }
-			true
-		elsif oppcol.any? { |pc| pc.potential_moves.include? square and pc.current_square[0] != square[0] }
+	def check? (square=@current_square) # okay, it's not picking up pawns again
+		# More specifically, white pawn can't check black king in game
+		oppcol = (@color == "white" ? @@black : @@white)
+		if oppcol.any? { |pc| pc.potential_moves.include? square }
 			true
 		else
 			false
@@ -287,12 +284,15 @@ end
 
 
 =begin
+king2 = King.new("black", [4, 7])
 king = King.new("white", [4,0])
-king2 = King.new("black", [4,2])
-pawn = Pawn.new("black", [4,1])
+pawn = Pawn.new("black", [6,2])
 2.times { [king, king2, pawn].each { |pc| pc.set_moves  } }
-#p rook.potential_moves
-#p rook.full_rom
+p pawn.potential_moves
+p king.potential_moves
+
+
+=begin
 #puts 
 p "Can occupy: #{king.potential_moves}"
 p "Can't occupy: #{king.barred_squares}"
@@ -310,5 +310,8 @@ p king.full_rom
 
 p king2.potential_moves
 p king2.full_rom
+
+		elsif oppcol.any? { |pc| pc.potential_moves.include? square and pc.current_square[0] != square[0] }
+			true
 
 =end

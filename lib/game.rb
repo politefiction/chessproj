@@ -46,8 +46,8 @@ class ChessGame
 		@snapshots << snapshot.sort!
 	end
 
-	def draw(player)
-		p "Draw. Nobody wins!"
+	def draw
+		puts "Draw due to #{yield}. Game over."
 		exit
 	end
 
@@ -56,9 +56,13 @@ class ChessGame
 	end
 
 	def fifty_move_rule?
-		unless @full_move_history[-1..-50].any? { |pc| pc[:moved].class == Pawn }
-			if @full_move_history[-1..-50].all? { |pc| pc[:captured_piece] == false }
-				true
+		if @full_move_history.length == 50
+			unless @full_move_history[-1..-50].any? { |pc| pc[:moved].class == Pawn }
+				if @full_move_history[-1..-50].all? { |pc| pc[:captured_piece] == false }
+					true
+				end
+			else
+				false
 			end
 		else
 			false
@@ -66,40 +70,35 @@ class ChessGame
 	end
 
 	def seventyfive_move_rule?
-		unless @full_move_history[-1..-75].any? { |pc| pc[:moved].class == Pawn }
-			if @full_move_history[-1..-75].all? { |pc| pc[:captured_piece] == false }
-				true
-			end
-		else
-			false
-		end
-	end
-
-	def ask_for_draw(player, opponent)
-		if fifty_move_rule? or threefold_rep?
-			p "Would #{player.color.capitalize} like to draw? (Y/N)"
-			answer = gets.chomp.downcase
-			if answer[0] == "y" and threefold_rep?
-				draw if threefold_rep
-				p "Does #{opponent.color.capitalize} agree a draw? (Y/N)"
-				response = gets.chomp.downcase
-				draw if response[0] == "y"
+		if @full_move_history.length == 75
+			unless @full_move_history[-1..-75].any? { |pc| pc[:moved].class == Pawn }
+				if @full_move_history[-1..-75].all? { |pc| pc[:captured_piece] == false }
+					true
+				end
+			else
+				false
 			end
 		end
 	end
 
-	def ask_to_resign?(player)
-		p "Would #{player.color.capitalize} like to resign? (Y/N)"
-		answer = gets.chomp.downcase
-		if answer[0] == "y"
-			p "#{player.color.capitalize} has resigned. Other player wins!"
-			exit
+	def ask_for_draw(player, opponent=nil)
+		opponent = (player == @p1 ? @p2 : @p1)
+		puts threefold_rep? ? "Threefold repetition." : "Fifty-move rule achieved."
+		player.confirm_draw do
+			draw { "threefold repetition" } if threefold_rep?
+			puts "Does #{opponent.color.capitalize} agree to a draw? (Y/N)"
+			response = gets.chomp.downcase
+			draw { "fifty-move rule" } if response[0] == "y"
 		end
 	end
 
 
 	def run_game (current=@p1)
-		2.times { @p1.generate_moves; @p2.generate_moves }
+		opponent = (current == @p1 ? @p2 : @p1 )
+		2.times { [current, opponent].each { |player| player.generate_moves } }
+		draw { "seventy-five move rule" } if seventyfive_move_rule?
+		ask_for_draw(current) if threefold_rep? or fifty_move_rule?
+		puts "Check for #{@p2.color}: #{@p2.king.check?}"
 		assess_king_status; process_turn(current)
 		puts; pieces_on_board; puts
 		if current == @p1
@@ -116,12 +115,11 @@ class ChessGame
 	end
 
 	def assess_king_status
-		kings = ChessPiece.all.select { |pc| pc.class == King }
-		kings.each do |king| 
-			if king.check?
-				king.protect_king
-				king_checkmated if king.checkmate?
-				 puts "#{king.color.capitalize}'s king is in check!"
+		[@p1, @p2].each do |player|
+			if player.king.check?
+				player.king.protect_king
+				king_checkmated if player.king.checkmate?
+				puts "#{player.color.capitalize}'s king is in check!"
 			else
 				king_stalemated?
 			end
@@ -153,6 +151,8 @@ game = ChessGame.new
 game.run_game
 
 =begin
+# Potential problem: how to trigger a draw method in the game class from within a method in the player class. Hmm.
+
 players = [game.p1, game.p2]
 players.each { |p| p.generate_moves }
 
@@ -165,17 +165,21 @@ game.p1.move_piece([5,2], [6,0])
 game.track_moves(game.p1); game.snapshot_board; players.each { |p| p.generate_moves }
 game.p2.move_piece([5,5], [6,7])
 game.track_moves(game.p2); game.snapshot_board; players.each { |p| p.generate_moves }
+game.p1.move_piece([6,0], [5,2]) 
+game.track_moves(game.p1); game.snapshot_board; players.each { |p| p.generate_moves }
+game.p2.move_piece([6,7], [5,5])
+game.track_moves(game.p2); game.snapshot_board; players.each { |p| p.generate_moves }
+game.p1.move_piece([5,2], [6,0])
+game.track_moves(game.p1); game.snapshot_board; players.each { |p| p.generate_moves }
+game.p2.move_piece([5,5], [6,7])
+game.track_moves(game.p2); game.snapshot_board; players.each { |p| p.generate_moves }
 
-p game.full_move_history # It works!
-puts
-moved_pieces = []
-#game.full_move_history.each { |pc| moved_pieces << pc[:moved].class }
-#p moved_pieces
-p game.full_move_history[-1..0].all? { |pc| pc[:moved].class == Knight }
 
-p game.snapshots.count(game.snapshots[-1])
 p game.threefold_rep?
 
+game.ask_for_draw(game.p1, game.p2)
+
+=begin
 
 =end
 

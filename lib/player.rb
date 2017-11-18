@@ -1,12 +1,13 @@
 require_relative 'pieces'
 
 class Player
-	attr_accessor :color, :pieces, :captured, :move_history
+	attr_accessor :color, :pieces, :king, :captured, :move_history
 	@@move_count = 0
 
 	def initialize(color)
 		@color = color
-		@pieces = []; @captured = []; @move_history = []
+		@pieces = []; @king = nil
+		@captured = []; @move_history = []
 		@color == "white" ? generate_pieces(0, 1) : generate_pieces(7, 6)
 	end
 
@@ -16,6 +17,7 @@ class Player
 		[1, 6].each { |x| @pieces << Knight.new(@color, [x,a]) }
 		[2, 5].each { |x| @pieces << Bishop.new(@color, [x, a]) }
 		(0..7).to_a.each { |x| @pieces << Pawn.new(@color, [x, b]) }
+		@king = @pieces.select { |pc| pc.class == King }[0]
 	end
 
 
@@ -111,31 +113,81 @@ class Player
 		@pieces -= opplayer.captured
 	end
 
+	# Alright, here's the plan: 
+	# 1) create a dummy method of sorts for draw in this class
+	# 2) when player enters "draw" in turn, it triggers this draw method
+	# 3) draw method will yield code (in game class)
+
+	def confirm_draw
+		puts "Would #{@color.capitalize} like to draw? (Y/N)"
+		answer = gets.chomp.downcase
+		@color == "white" ? oppcol = "black" : oppcol = "white"
+		if answer[0] == "y"
+			yield if block_given?
+			unless block_given?
+				puts "Does #{oppcol.capitalize} agree to a draw?"
+				response = gets.chomp.downcase
+				if response[0] == "y"
+					puts "Both players have agreed to a draw. Ganme over."
+					exit
+				end
+			end
+		end
+	end
+
+	def confirm_resignation
+		puts "Would #{@color.capitalize} like to resign? (Y/N)"
+		answer = gets.chomp.downcase
+		@color == "white" ? oppcol = "black" : oppcol = "white"
+		if answer[0] == "y"
+			puts "#{@color.capitalize} has resigned. #{oppcol.capitalize} wins!"
+			exit
+		end
+	end
+
 	def turn
 		puts "#{@color.capitalize}\'s turn. Where is the piece you'd like to move? (e.g., 'A4', 'G2', etc.): "
-		fromalpha = gets.chomp; from = convert_coord(fromalpha)
-		if @pieces.any? { |pc| pc.current_square == from }
-			piece = @pieces.select { |pc| pc.current_square == from }[0]
-			if !piece.potential_moves.empty?
-				puts "Where would you like to move this piece?"
-				toalpha = gets.chomp; to = convert_coord(toalpha)
-				move_piece(from, to)
-			else
-				puts "This piece has no available moves. Please choose another piece."; turn
-			end
+		fromalpha = gets.chomp.downcase
+		if fromalpha == "resign"
+			confirm_resignation
+		elsif fromalpha == "draw"
+			confirm_draw
 		else
-			puts from == false ? "That coordinate is not valid. Please try again." : "Please choose a square occupied by a #{@color} piece."
-			turn
+			from = convert_coord(fromalpha) #unless fromalpha == "draw" or "resign"
+			if @pieces.any? { |pc| pc.current_square == from }
+				piece = @pieces.select { |pc| pc.current_square == from }[0]
+				if !piece.potential_moves.empty?
+					puts "Where would you like to move this piece?"
+					toalpha = gets.chomp; to = convert_coord(toalpha)
+					move_piece(from, to)
+				else
+					puts "This piece has no available moves. Please choose another piece."; turn
+				end
+			else
+				puts from == false ? "That coordinate is not valid. Please try again." : "Please choose a square occupied by a #{@color} piece."
+				turn
+			end
 		end
 	end
 end
 
+
 =begin
 player1 = Player.new("white")
 player2 = Player.new("black")
-player1.generate_moves
-player2.generate_moves
+bpawn = Pawn.new("black", [3,1])
+player2.pieces << bpawn
 
+2.times {[player1, player2].each { |player| player.generate_moves }}
+
+
+p bpawn.potential_moves
+p player1.king.current_square
+puts
+p player1.king.check?
+
+
+=begin
 player2.pieces.each { |pc| puts "#{pc.class}: #{pc.potential_moves}"}
 
 2.times { [player1, player1].each { |p| p.generate_moves } }
