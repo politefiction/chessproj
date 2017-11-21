@@ -38,7 +38,7 @@ class ChessGame
 		@full_move_history << player.move_history[-1]
 	end
 
-	def snapshot_board
+	def snapshot_board # Messing up on pawn_promotion; investigate
 		snapshot = []
 		ChessPiece.all.select { |pc| pc.current_square != nil }.each do |pc|
 			snapshot << [pc.class.to_s, pc.color, pc.current_square]
@@ -95,11 +95,11 @@ class ChessGame
 
 	def run_game (current=@p1)
 		opponent = (current == @p1 ? @p2 : @p1 )
-		2.times { [current, opponent].each { |player| player.generate_moves } }
+		[current, opponent].each { |player| player.generate_moves }
+		snapshot_board; assess_king_status;
 		draw { "seventy-five move rule" } if seventyfive_move_rule?
 		ask_for_draw(current) if threefold_rep? or fifty_move_rule?
-		puts "Check for #{@p2.color}: #{@p2.king.check?}"
-		assess_king_status; process_turn(current)
+		process_turn(current)
 		puts; pieces_on_board; puts
 		if current == @p1
 			@p2.subtract_captured_by(@p1)
@@ -111,7 +111,7 @@ class ChessGame
 	end
 
 	def process_turn(player)
-		player.turn; track_moves(player); snapshot_board
+		player.turn; track_moves(player)
 	end
 
 	def assess_king_status
@@ -151,33 +151,24 @@ game = ChessGame.new
 game.run_game
 
 =begin
-# Potential problem: how to trigger a draw method in the game class from within a method in the player class. Hmm.
 
 players = [game.p1, game.p2]
 players.each { |p| p.generate_moves }
 
 game.snapshot_board
-game.p1.move_piece([6,0], [5,2]) 
+game.p1.move_piece([4,1], [4,3]) 
 game.track_moves(game.p1); game.snapshot_board; players.each { |p| p.generate_moves }
-game.p2.move_piece([6,7], [5,5])
+game.p2.move_piece([3,6], [3,5])
 game.track_moves(game.p2); game.snapshot_board; players.each { |p| p.generate_moves }
-game.p1.move_piece([5,2], [6,0])
+game.p1.move_piece([5,0], [1,4])
 game.track_moves(game.p1); game.snapshot_board; players.each { |p| p.generate_moves }
-game.p2.move_piece([5,5], [6,7])
-game.track_moves(game.p2); game.snapshot_board; players.each { |p| p.generate_moves }
-game.p1.move_piece([6,0], [5,2]) 
-game.track_moves(game.p1); game.snapshot_board; players.each { |p| p.generate_moves }
-game.p2.move_piece([6,7], [5,5])
-game.track_moves(game.p2); game.snapshot_board; players.each { |p| p.generate_moves }
-game.p1.move_piece([5,2], [6,0])
-game.track_moves(game.p1); game.snapshot_board; players.each { |p| p.generate_moves }
-game.p2.move_piece([5,5], [6,7])
-game.track_moves(game.p2); game.snapshot_board; players.each { |p| p.generate_moves }
 
 
-p game.threefold_rep?
+p game.p2.king.protect_king
+p game.p2.king.check?
 
-game.ask_for_draw(game.p1, game.p2)
+
+#game.ask_for_draw(game.p1, game.p2)
 
 =begin
 

@@ -25,36 +25,6 @@ class Player
 		@pieces.each { |pc| pc.set_moves }
 	end
 
-
-	def castling?(king, to)
-		y = king.current_square[1]
-		rook1 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [0, y] }[0]
-		rook2 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [7, y] }[0]
-		if king.first_move
-			(rook1.current_square = [2,y] if to == [1,y]) if king.potential_moves.include? [1,y]
-			(rook2.current_square = [5,y] if to == [6,y]) if king.potential_moves.include? [6,y]
-		end
-	end
-
-	def pawn_promotion?(movepc, to)
-		if (movepc.color == "white" and to[1] == 7) or (movepc.color == "black" and to[1] == 0)
-			puts "Which promotion would you like for your pawn: 1) Rook, 2) Bishop, 3) Knight or 4) Queen?"
-			answer = gets.chomp.downcase
-			case answer
-			when "rook", "1"
-				@pieces << Rook.new(@color, to); movepc.nullify
-			when "bishop", "2"
-				@pieces << Bishop.new(@color, to); movepc.nullify
-			when "knight", "3"
-				@pieces << Knight.new(@color, to); movepc.nullify
-			when "queen", "4"
-				@pieces << Queen.new(@color, to); movepc.nullify
-			else
-				puts "That option is not available. Please try again."; turn
-			end
-		end
-	end
-
 	def convert_coord(coord)
 		split_coord = coord.downcase.split(//)
 		num_coord = []
@@ -68,34 +38,84 @@ class Player
 		end
 	end
 
+	def capture_piece(to, captured_piece)
+		oppospc = ChessPiece.all.select { |pc| pc.current_square == to }[0]
+		oppospc.previous_square = to; oppospc.nullify
+		captured_piece = true; @captured << oppospc
+	end
+
+	def subtract_captured_by(opplayer)
+		@pieces -= opplayer.captured
+	end
+
+	def castling?(king, to)
+		y = king.current_square[1]
+		rook1 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [0, y] }[0]
+		rook2 = ChessPiece.all.select { |pc| pc.class == Rook and pc.current_square == [7, y] }[0]
+		if king.first_move
+			(rook1.current_square = [2,y] if to == [1,y]) if king.potential_moves.include? [1,y]
+			(rook2.current_square = [5,y] if to == [6,y]) if king.potential_moves.include? [6,y]
+		end
+	end
+
+	def assign_promotion(movepc, to)
+		puts "Which promotion would you like for your pawn: 1) Rook, 2) Bishop, 3) Knight or 4) Queen?"
+		answer = gets.chomp.downcase
+		case answer
+		when "rook", "1"
+			@pieces << Rook.new(@color, to); movepc.nullify
+		when "bishop", "2"
+			@pieces << Bishop.new(@color, to); movepc.nullify
+		when "knight", "3"
+			@pieces << Knight.new(@color, to); movepc.nullify
+		when "queen", "4"
+			@pieces << Queen.new(@color, to); movepc.nullify
+		else
+			puts "That option is not available. Please try again."; assign_promotion(movepc, to)
+		end
+	end
+
+	def pawn_promotion?(movepc, to)
+		if movepc.class == Pawn
+			prosquare = (movepc.color == "white" ? 7 : 0)
+			to[1] == prosquare ? true : false
+		end
+	end
+
+	def process_special_cases(movepc, to)
+		castling?(movepc, to) if movepc.class == King
+		movepc.first_move = false if movepc.class == (Pawn || Rook || King)
+		if pawn_promotion?(movepc, to)
+			assign_promotion(movepc, to)
+		end
+	end
+
 	def hint(movepc)
 		alphanums = []
 		movepc.potential_moves.each do |coord|
 			anc = ""
-			('a'..'h').to_a.each_with_index { |let, i| anc << let.upcase if coord[0] == i }
+			('a'..'h').to_a.each_with_index { |ltr, i| anc << ltr.upcase if coord[0] == i }
 			anc << (coord[1]+1).to_s
 			alphanums << anc
 		end
 		puts "Potential moves for #{movepc.class}: #{alphanums.join(", ")}"
 	end
 
+	def offer_hint(movepc)
+		puts "Invalid move. Would you like to see potential moves? (Y/N)"
+		answer = gets.chomp.downcase
+		hint(movepc) if answer[0] == "y"; turn
+	end
+
 	def move_piece(from, to)
 		movepc = @pieces.select { |pc| pc.current_square == from }[0]; captured_piece = false
 		if movepc.potential_moves.include? to
-			if ChessPiece.occupies? to
-				oppospc = ChessPiece.all.select { |pc| pc.current_square == to }[0]
-				oppospc.previous_square = to; oppospc.nullify
-				captured_piece = true; @captured << oppospc
-			end
-			castling?(movepc, to) if movepc.class == King
+			capture_piece(to, captured_piece) if ChessPiece.occupies? to
+			process_special_cases(movepc, to); movepc = @pieces[-1] if pawn_promotion?(movepc, to)
 			movepc.previous_square = from; movepc.current_square = to
 			track_player_moves(movepc, captured_piece)
-			pawn_promotion?(movepc, to) if movepc.class == Pawn
-			movepc.first_move = false if movepc.class == (Pawn || Rook || King)
 		else
-			puts "Invalid move. Would you like to see potential moves? (Y/N)"
-			answer = gets.chomp.downcase
-			hint(movepc) if answer[0] == "y"; turn
+			offer_hint(movepc)
 		end
 	end
 
@@ -109,22 +129,14 @@ class Player
 		}
 	end
 
-	def subtract_captured_by(opplayer)
-		@pieces -= opplayer.captured
-	end
-
-	# Alright, here's the plan: 
-	# 1) create a dummy method of sorts for draw in this class
-	# 2) when player enters "draw" in turn, it triggers this draw method
-	# 3) draw method will yield code (in game class)
-
 	def confirm_draw
 		puts "Would #{@color.capitalize} like to draw? (Y/N)"
 		answer = gets.chomp.downcase
 		@color == "white" ? oppcol = "black" : oppcol = "white"
 		if answer[0] == "y"
-			yield if block_given?
-			unless block_given?
+			if block_given?
+				yield
+			else
 				puts "Does #{oppcol.capitalize} agree to a draw?"
 				response = gets.chomp.downcase
 				if response[0] == "y"
@@ -153,7 +165,7 @@ class Player
 		elsif fromalpha == "draw"
 			confirm_draw
 		else
-			from = convert_coord(fromalpha) #unless fromalpha == "draw" or "resign"
+			from = convert_coord(fromalpha) 
 			if @pieces.any? { |pc| pc.current_square == from }
 				piece = @pieces.select { |pc| pc.current_square == from }[0]
 				if !piece.potential_moves.empty?
@@ -177,6 +189,11 @@ player1 = Player.new("white")
 player2 = Player.new("black")
 bpawn = Pawn.new("black", [3,1])
 player2.pieces << bpawn
+
+p player2.process_special_cases(bpawn, [3,0])
+p player2.pieces[-1]
+
+=begin
 
 2.times {[player1, player2].each { |player| player.generate_moves }}
 
