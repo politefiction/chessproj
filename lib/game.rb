@@ -5,7 +5,7 @@ require_relative 'player'
 # Notes:
 # King protection stuff appears to be working now. Castling move fixed.
 # Pawn promotion added.
-# Need draw conditions.
+# Draw conditions added.
 
 
 class ChessGame

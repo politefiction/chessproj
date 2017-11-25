@@ -2,14 +2,14 @@
 
 # Attributes and methods common(ish) to all pieces
 class ChessPiece 
-	attr_accessor :color, :token, :current_square, :previous_square, :potential_moves, :first_move
+	attr_accessor :color, :token, :current_square, :previous_square, :potential_moves, :first_move, :full_rom
 	@@all = []; @@white = []; @@black = []
 
 	def initialize(color, current_square)
 		@color = color
 		@current_square = current_square
 		@previous_square = nil
-		@potential_moves = []
+		@potential_moves = []; @full_rom = []
 		@@all << self
 		@color == "white" ? @@white << self : @@black << self
 	end
@@ -32,7 +32,7 @@ class ChessPiece
 	end
 
 	def set_token(wt, bt)
-		@color == "white" ? @token = wt : @token = bt
+		@token = (@color == "white" ? wt : bt)
 	end 
 
 	def set_moves_gen
@@ -54,11 +54,16 @@ class ChessPiece
 	# Helper for setting rook, bishop, and queen moves
 	def push_by_stops(stop_hash)
 		stop_hash.map do |coord, stop| 
+			@full_rom << coord if valid?(coord)
 			unless stop.include? true
-				@potential_moves << coord if coord.all? { |c| c.between?(0,7) }
+				@potential_moves << coord if valid?(coord)
 			end
 			stop << true if ChessPiece.occupies?(coord)
 		end
+	end
+
+	def valid?(coord)
+		coord.all? { |c| c.between?(0,7) } ? true : false
 	end
 
 	def self.occupies? (coord)
@@ -71,6 +76,7 @@ class ChessPiece
 		self.color = nil
 		self.potential_moves = nil
 	end
+
 end
 
 class Pawn < ChessPiece 
@@ -105,7 +111,7 @@ class Rook < ChessPiece
 	end
 
 	def set_moves
-		@potential_moves = []
+		@potential_moves = []; @full_rom = []
 		set_moves_gen do |x, y, pm|
 			estop = [false]; wstop = [false]; nstop = [false]; sstop = [false]
 			(1..7).to_a.map do |n|
@@ -127,12 +133,12 @@ class Knight < ChessPiece
 	def knight_base(a, b)
 		set_moves_gen do |x, y, pm|
 			kncoords = [[x+a, y+b], [x+a, y-b], [x-a, y+b], [x-a, y-b]]
-			kncoords.each { |coord| pm << coord if coord.all? { |c| c.between?(0,7) } }
+			kncoords.each { |coord| pm << coord if valid?(coord) }
 		end
 	end
 
 	def set_moves
-		@potential_moves = []
+		@potential_moves = []; @full_rom = []
 		knight_base(1, 2)
 		knight_base(2, 1)
 	end
@@ -147,7 +153,7 @@ class Bishop < ChessPiece
 	end
 
 	def set_moves
-		@potential_moves = []
+		@potential_moves = []; @full_rom = []
 		set_moves_gen do |x, y, pm|
 			nestop = [false]; nwstop = [false]; sestop = [false]; swstop = [false]
 			(1..7).to_a.each do |n|
@@ -167,7 +173,7 @@ class Queen < ChessPiece
 	end
 
 	def set_moves
-		@potential_moves = []
+		@potential_moves = []; @full_rom = []
 		set_moves_gen do |x, y, pm|
 			estop = [false]; wstop = [false]; nstop = [false]; sstop = [false]
 			nestop = [false]; nwstop = [false]; sestop = [false]; swstop = [false]
@@ -181,14 +187,14 @@ class Queen < ChessPiece
 end
 
 class King < ChessPiece 
-	attr_accessor :checkmate, :protection, :full_rom, :barred_squares
+	attr_accessor :checkmate, :protection, :barred_squares
 	@@wt = "♔"; @@bt = "♚"
 
 	def initialize(color, current_square)
 		super
 		@first_move = true
 		@checkmate = false
-		@protection = []; @barred_squares = []; @full_rom = []
+		@protection = []; @barred_squares = []
 		set_token(@@wt, @@bt)
 	end
 
@@ -222,7 +228,7 @@ class King < ChessPiece
 	end
 
 	def pushto_fullrom_pm(coord)
-		if coord.all? { |c| c.between?(0,7) }
+		if valid?(coord)
 			@full_rom << coord
 			@potential_moves << coord unless @barred_squares.include? coord
 		end
@@ -256,55 +262,72 @@ class King < ChessPiece
 		end
 	end
 
-	def checkmate?
+	def checkmate? 
 		if check?
 			@checkmate = true if @potential_moves.all? { |coord| check? coord } and @protection.empty?
 		end
 		@checkmate
 	end
 
+
 	def stalemate?
-		@color == "white" ? team = @@white : team = @@black
-		(check? == false and team.all? { |pc| pc.potential_moves.empty? }) ? true : false
+		samecol = (@color == "white" ? @@white : @@black)
+		(check? == false and samecol.all? { |pc| pc.potential_moves.empty? }) ? true : false
 	end
 
 	def protect_king 
 		@protection = []
-		samecol = @@all.select { |pc| pc.color == @color }
-		oppcol = @@all.select { |pc| pc.color != @color }
-		generate_protective_moves(samecol, oppcol)
-		samecol.select { |pc| pc.class != King }.each do |pc|
-			pc.potential_moves = (pc.potential_moves & @protection)
-		end
+		kingsmen = @@all.select { |pc| pc.color == @color and pc.class != King }
+		oppcol = (@color == "white" ? @@black : @@white)
+		generate_protective_moves(kingsmen, oppcol)
+		oppcol.each { |pc| pc.set_moves }
+		kingsmen.each { |pc| pc.potential_moves = (pc.potential_moves & @protection) }
 	end
 
-	def generate_protective_moves (samecol, oppcol)
-		oppcol.select { |pc| pc.potential_moves.include? @current_square }.each { |pc| @protection << pc.current_square }
-		samecol.select { |pc| pc.class != King }.each do |pc|
+	def generate_protective_moves (kingsmen, oppcol)
+		threats = oppcol.select { |pc| pc.potential_moves.include? @current_square }
+		kingsmen.each do |pc|
 			real_csquare = pc.current_square
-			pc.potential_moves.each do |coord|
-				unless @protection.include? coord
-					pc.current_square = coord
-					oppcol.each { |pc| pc.set_moves }
-					@protection << coord if check? == false
-				end
-			end
+			neutralize_threats(pc, threats)
 			pc.current_square = real_csquare
 		end
 	end
+
+	def neutralize_threats(pc, threats)
+		threats.each do |tha|
+			@protection << tha.current_square
+			ovlp = pc.potential_moves & tha.potential_moves
+			ovlp.each do |coord|
+				pc.current_square = coord
+				threats.each { |pc| pc.set_moves }
+				@protection << coord if check? == false
+			end
+		end
+	end
+
+
 end
 
 
-# Unsure of how to optimize protect_king method; may fix at later date.
-
 =begin
+rook = Rook.new("white", [6,0])
+#rook.set_moves
+#p rook.potential_moves
+#p rook.full_rom
+
+
 
 king2 = King.new("black", [4, 7])
-king = King.new("white", [4,0])
-pawn = Pawn.new("black", [4,1])
-2.times { [king, king2, pawn].each { |pc| pc.set_moves  } }
+king = King.new("white", [4, 1])
+pawn = Pawn.new("white", [5, 1])
+#rook2 = Rook.new("black", [2, 1])
+bishop = Bishop.new("black", [7,4])
+ChessPiece.white.each { |pc| pc.set_moves  }
+ChessPiece.black.each { |pc| pc.set_moves  }
+king.protect_king
 p pawn.potential_moves
-p king.potential_moves
+p rook.potential_moves
+p king.isolate_threats(ChessPiece.black)
 
 
 =begin
