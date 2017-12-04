@@ -1,6 +1,4 @@
-#require_relative 'board'
 
-# Attributes and methods common(ish) to all pieces
 class ChessPiece 
 	attr_accessor :color, :token, :current_square, :previous_square, :potential_moves, :first_move, :full_rom
 	@@all = []; @@white = []; @@black = []
@@ -26,7 +24,6 @@ class ChessPiece
 		@@black
 	end
 
-	# Clears the board for a new game
 	def self.clear
 		@@all = []; @@white = []; @@black = []
 	end
@@ -45,9 +42,7 @@ class ChessPiece
 	end
 
 	def subtract_overlap(same, opp)
-		overlap = @potential_moves & same.map do |pc| 
-			pc.current_square
-		end
+		overlap = @potential_moves & same.map { |pc| pc.current_square }
 		@potential_moves -= overlap
 	end
 
@@ -66,7 +61,7 @@ class ChessPiece
 		coord.all? { |c| c.between?(0,7) } ? true : false
 	end
 
-	def self.occupies? (coord)
+	def self.occupies?(coord)
 		occupied = @@all.map { |pc| pc.current_square }
 		occupied.include? coord
 	end
@@ -76,7 +71,6 @@ class ChessPiece
 		self.color = nil
 		self.potential_moves = nil
 	end
-
 end
 
 class Pawn < ChessPiece 
@@ -187,41 +181,47 @@ class Queen < ChessPiece
 end
 
 class King < ChessPiece 
-	attr_accessor :checkmate, :protection, :barred_squares
+	attr_accessor :protection, :barred_squares, :oppcol
 	@@wt = "♔"; @@bt = "♚"
 
 	def initialize(color, current_square)
 		super
 		@first_move = true
-		@checkmate = false
 		@protection = []; @barred_squares = []
 		set_token(@@wt, @@bt)
+		@oppcol = (@color == "white" ? @@black : @@white)
 	end
 
 	def set_moves 
 		@potential_moves = []; @barred_squares = []; @full_rom = []
 		determine_barred_squares
 		set_moves_gen do |x, y, pm|
-			kcoords = [[x, y+1], [x, y-1], [x+1, y], [x+1, y+1], [x+1, y-1], [x-1, y], [x-1, y+1], [x-1, y-1]]
+			kcoords = [[x, y+1], [x, y-1], [x+1, y], [x+1, y+1], 
+				[x+1, y-1], [x-1, y], [x-1, y+1], [x-1, y-1]]
 			kcoords.each { |coord| pushto_fullrom_pm(coord) }
-			can_castle?(pm, y) if @first_move and check? == false
+			maybe_castle_move(pm, y) if @first_move and check? == false
 			pawn_ahead?(x, y)
 		end
 	end
 
-	def determine_barred_squares
-		real_csquare = @current_square
-		oppcol = (@color == "white" ? @@black : @@white)
-		oppking = oppcol.select { |pc| pc.class == King }[0]
-		bar_squares(oppcol, oppking)
-		@current_square = real_csquare
+	def reassess_moves(pc)
+		real_csquare = pc.current_square
+		yield
+		pc.current_square = real_csquare
 	end
 
-	def bar_squares(oppcol, oppking)
+	def determine_barred_squares
+		reassess_moves(self) do
+			oppking = @oppcol.select { |pc| pc.class == King }[0]
+			bar_squares(oppking)
+		end
+	end
+
+	def bar_squares(oppking)
 		(0..7).to_a.each do |x|
 			(0..7).to_a.each do |y|
 				@current_square = [x, y]
-				oppcol.each { |pc| pc.set_moves unless pc == oppking }
+				@oppcol.each { |pc| pc.set_moves unless pc == oppking }
 				@barred_squares << [x, y] if check? or oppking.full_rom.include? [x,y]
 			end
 		end
@@ -236,120 +236,103 @@ class King < ChessPiece
 
 	def pawn_ahead?(x, y)
 		sides = [[x+1, y], [x-1, y]]
-		oppcol = (@color == "white" ? @@black : @@white)
 		ahead = (@color == "white" ? [x, y+1] : [x, y-1])
-		@potential_moves -= sides if oppcol.any? { |pc| pc.class == Pawn and pc.current_square == ahead }
+		if @oppcol.any? { |pc| pc.class == Pawn and pc.current_square == ahead }
+			@potential_moves -= sides 
+		end
 	end
 
-	def can_castle?(pm, y)
-		rooks = @@all.select { |pc| pc.class == Rook and pc.first_move == true and pc.color == @color }
+	def maybe_castle_move(pm, y)
+		rooks = @@all.select { |pc| pc.class == Rook and pc.first_move and pc.color == @color }
 		left = [1,2,3]
 		right = [5,6]
 		pm << [1, y] if rooks.any? { |pc| pc.current_square == [0, y] } and all_clear?(left, y)
 		pm << [6, y] if rooks.any? { |pc| pc.current_square == [7, y] } and all_clear?(right, y)
 	end
 
-	def all_clear? (direction, y)
+	def all_clear?(direction, y)
 		direction.all? { |x| !(ChessPiece.occupies? [x, y]) and !(check? [x, y]) }
 	end
 
-	def check? (square=@current_square)
-		oppcol = (@color == "white" ? @@black : @@white)
-		if oppcol.any? { |pc| pc.potential_moves.include? square }
-			true
+	def check?(square=@current_square)
+		@oppcol.any? { |pc| pc.potential_moves.include? square }
+	end
+
+	def checkmate? 
+		if check?
+			@potential_moves.all? { |coord| check? coord } and @protection.empty?
+	end
+
+	def check_draw_rules(current)
 		else
 			false
 		end
 	end
 
-	def checkmate? 
-		if check?
-			@checkmate = true if @potential_moves.all? { |coord| check? coord } and @protection.empty?
-		end
-		@checkmate
-	end
-
-
 	def stalemate?
 		samecol = (@color == "white" ? @@white : @@black)
-		(check? == false and samecol.all? { |pc| pc.potential_moves.empty? }) ? true : false
+		check? == false and samecol.all? { |pc| pc.potential_moves.empty? }
 	end
 
-	def protect_king 
-		@protection = []
+	def assess_threats
+		pts = @oppcol.select { |pc| pc.full_rom.include? @current_square }
 		kingsmen = @@all.select { |pc| pc.color == @color and pc.class != King }
-		oppcol = (@color == "white" ? @@black : @@white)
-		generate_protective_moves(kingsmen, oppcol)
-		oppcol.each { |pc| pc.set_moves }
+		check? ? protect_king(kingsmen) : address_potential_threats(kingsmen, pts)
+	end
+
+	def protect_king(kingsmen)
+		@protection = []
+		generate_protective_moves(kingsmen)
+		@oppcol.each { |pc| pc.set_moves }
 		kingsmen.each { |pc| pc.potential_moves = (pc.potential_moves & @protection) }
 	end
 
-	def generate_protective_moves (kingsmen, oppcol)
-		threats = oppcol.select { |pc| pc.potential_moves.include? @current_square }
-		kingsmen.each do |pc|
-			real_csquare = pc.current_square
-			neutralize_threats(pc, threats)
-			pc.current_square = real_csquare
+	def generate_protective_moves(kingsmen)
+		threats = @oppcol.select { |pc| pc.potential_moves.include? @current_square }
+		kingsmen.each do |km|
+			reassess_moves(km) { neutralize_threats(km, threats) }
 		end
 	end
 
 	def neutralize_threats(pc, threats)
-		threats.each do |tha|
-			@protection << tha.current_square
-			ovlp = pc.potential_moves & tha.potential_moves
-			ovlp.each do |coord|
-				pc.current_square = coord
-				threats.each { |pc| pc.set_moves }
-				@protection << coord if check? == false
-			end
+		threats.each do |thr|
+			@protection << thr.current_square
+			overlap = pc.potential_moves & thr.potential_moves
+			process_overlap(overlap, pc, threats)
 		end
 	end
 
+	def process_overlap(overlap, piece, threats)
+		overlap.each do |coord|
+			piece.current_square = coord
+			threats.each { |pc| pc.set_moves }
+			@protection << coord if check? == false
+		end
+	end
 
+	def address_potential_threats(kingsmen, pts)
+		kingsmen.each do |km|
+			if pts.any? { |pt| pt.potential_moves.include? km.current_square }
+				reassess_moves(km) { prevent_threat(km, pts) }
+				pts.each { |pt| pt.set_moves }
+			end
+
+		end
+	end
+
+	def prevent_threat(km, pts)
+		can_move_to = []
+		km.potential_moves.each do |coord|
+			km.current_square = coord
+			pts.each { |pt| pt.set_moves }
+			can_move_to << coord if check? == false
+		end
+		km.potential_moves = can_move_to
+	end
+
+	def assess_threats
+		pts = @oppcol.select { |pc| pc.full_rom.include? @current_square }
+		kingsmen = @@all.select { |pc| pc.color == @color and pc.class != King }
+		check? ? protect_king(kingsmen) : address_potential_threats(kingsmen, pts)
+	end
 end
-
-
-=begin
-rook = Rook.new("white", [6,0])
-#rook.set_moves
-#p rook.potential_moves
-#p rook.full_rom
-
-
-
-king2 = King.new("black", [4, 7])
-king = King.new("white", [4, 1])
-pawn = Pawn.new("white", [5, 1])
-#rook2 = Rook.new("black", [2, 1])
-bishop = Bishop.new("black", [7,4])
-ChessPiece.white.each { |pc| pc.set_moves  }
-ChessPiece.black.each { |pc| pc.set_moves  }
-king.protect_king
-p pawn.potential_moves
-p rook.potential_moves
-p king.isolate_threats(ChessPiece.black)
-
-
-=begin
-#puts 
-p "Can occupy: #{king.potential_moves}"
-p "Can't occupy: #{king.barred_squares}"
-p "Current square: #{king.current_square}"
-puts
-p king.stalemate?
-
-pawn = Pawn.new("black", [4,1])
-king = King.new("white", [4,0])
-king2 = King.new("black", [4,2])
-
-[pawn, king, king2].each { |pc| pc.set_moves }
-p king.potential_moves
-p king.full_rom
-
-p king2.potential_moves
-p king2.full_rom
-
-		elsif oppcol.any? { |pc| pc.potential_moves.include? square and pc.current_square[0] != square[0] }
-			true
-
-=end
