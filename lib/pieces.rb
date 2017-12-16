@@ -261,9 +261,6 @@ class King < ChessPiece
 	def checkmate? 
 		if check?
 			@potential_moves.all? { |coord| check? coord } and @protection.empty?
-	end
-
-	def check_draw_rules(current)
 		else
 			false
 		end
@@ -316,7 +313,6 @@ class King < ChessPiece
 				reassess_moves(km) { prevent_threat(km, pts) }
 				pts.each { |pt| pt.set_moves }
 			end
-
 		end
 	end
 

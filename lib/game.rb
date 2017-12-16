@@ -34,7 +34,7 @@ class ChessGame
 
 	def self.load_game
 		data = YAML.load(File.read("saved_game.yaml"))
-		save = self.new;
+		save = self.new
 		save.board = data[:board]
 		save.p1 = data[:p1]; save.p2 = data[:p2]
 		ChessGame.load_chesspieces(save.p1, save.p2)
@@ -182,7 +182,7 @@ end
 
 
 
-game = ChessGame.new
-game.start_game
+#game = ChessGame.new
+#game.start_game
 
 

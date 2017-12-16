@@ -41,9 +41,6 @@ class Player
 		end
 	end
 
-	def save
-	end
-
 	def confirm_resignation
 		puts "Would #{@color.capitalize} like to resign? (Y/N)"
 		answer = gets.chomp.downcase
@@ -51,6 +48,9 @@ class Player
 		if answer[0] == "y"
 			puts "#{@color.capitalize} has resigned. #{oppcol} wins!"
 			exit
+		elsif answer[0] != "n"
+			puts "Unable to understand entry. Please try again."
+			puts; confirm_resignation
 		end
 	end
 
@@ -60,6 +60,9 @@ class Player
 		@color == "white" ? oppcol = "black" : oppcol = "white"
 		if answer[0] == "y"
 			block_given? ? yield : confirm_with_opponent(oppcol)
+		elsif answer[0] != "n"
+			puts "Unable to understand entry. Please try again."
+			puts; confirm_draw
 		end
 	end
 
@@ -70,6 +73,9 @@ class Player
 			yield if block_given?
 			puts "Both players have agreed to a draw. Game over."
 			exit
+		elsif answer[0] != "n"
+			puts "Unable to understand entry. Please try again."
+			puts; confirm_with_opponent(oppcol)
 		end
 	end
 
